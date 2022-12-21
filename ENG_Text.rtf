@@ -1,0 +1,89 @@
+{\rtf1\ansi\ansicpg1251\cocoartf2636
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 Transkribus\
+Transkribus is a text digitization and recognition platform based on HTR (Handwritten Text Recognition technology) that allows to train special text recognition models. Trained models are capable of recognizing handwritten, typewritten and printed documents in a wide range of languages. To create a training model, one must first mark up the document, highlight the lines, and, most importantly, transcribe from 5 000 to 15 000 words manually (25-75 pages), depending on if it is printed or handwritten text. \
+Despite claims of the ability to recognize handwritten texts, in practice one may encounter the following problems. Each archival source was written in a different handwriting, in a different ink and on a different paper, which can make document recognition inefficient and contain many errors. In particular, as can be seen in Figure 1, my model failed to separate the document into columns and layouts. In other words, Transcribus does not recognize the structure of the document and is not an effective tool for working with documents in table format. Instead, it separated two columns into two paragraphs. Despite this, compared to other OCR  programms, this separation made the text more readable. \
+In addition, the result of the recognition contains many errors, despite the fact that my model has been trained four times. The Character Error Rate (CER) of 13.78% indicated for my model does not correspond to the real numbers. There are almost no words without errors in the text. This is partly due to the fact that when users create their own model, they can use models available in the public domain as a base for training. However, out of 80 publicly available models, there is only 3 models for Russian Handwriting (Russian generic handwriting 2; Russian Civil Records late XIX cent; Russian Handwriting early 20th century) and 1 model for Russian printed texts (Russian print of the 18 c. (V. Okorokov\'92s Printing House). Transkribus is more focused on the languages of the European Union member states (Czech, English, German, Finnish, French, Italian, Dutch, Latin, Polish, Portuguese, Slovak, Slovak, Slovenian, Spanish, and Swedish).\
+\
+Google Lens\
+Text recognition through Google Lens is quite different from Transkribus. Google Lens provides much simpler functionality and an intuitive user interface. However, the capability of this service is limited. Users have no possibility to create and train their own models. This means that Google Lens is unsuitable for working with such peculiar documents as archive records in Russian. For example, as can be seen in Figure 2, Google Lens can not detect all zones of the page to be recognized. As for text recognition, only three words were recognized correctly (these words are highlighted in bold). Most of the text was not identified as Cyrillic (which is marked in maroon) at all. The numbers were recognized correctly, which is not always the case with Transkribus. \
+\
+Google Vision API\
+Google Vision API does not require any additional work to create and train a model for recognizing handwritten Russian. The Google Vision API requires no additional software installation and can be launched in an IDE (in particular, the code below was tested in IDLE, Visual Studio Code, and Jupyter). The following code was used for text recognition:\
+\
+import os, io\
+from google.cloud import vision_v1\
+from google.cloud.vision_v1 import types\
+import pandas as pd\
+\
+os.environ['GOOGLE_APPLICATION_CREDENTIALS']='/users/path/ServiceAccountToken.json'\
+\
+client = vision_v1.ImageAnnotatorClient()\
+\
+FILE_NAME = 'Image.jpg'\
+FOLDER_PATH = r'/Users/path'\
+\
+with io.open(os.path.join(FOLDER_PATH, FILE_NAME),  'rb') as image_file:\
+   content = image_file.read()\
+\
+image = vision_v1.types.Image(content=content)\
+response = client.text_detection(image=image)\
+texts = response.text_annotations\
+\
+df = pd.DataFrame(columns=['locale', 'description'])\
+for text in texts:\
+   df = df.append(\
+       dict(\
+           locale=text.locale,\
+            description=text.description\
+       ),\
+       ignore_index=True\
+   )\
+\
+print(df['description'][0])\
+\
+\
+\
+\
+\
+It is excellent at recognizing printed Russian texts and works tolerably well with handwritten texts. However, as can be seen in Figure 3, Google Vision API is not able to recognize handwritten 19th-century Russian correctly.  All the words in the text, except for the two in bold maroon, were not recognized correctly. Most of the text was recognized as Latin. At the same time, modern Russian written in a neat handwriting was recognized relatively well (see Figure 4).\
+ Google Vision API was also tested on an archive document, which was written in both printed and handwritten. The printed text was recognized correctly, which cannot be said about the handwritten one (see Figure 5). Another problem is that, unlike Transkribus, Google Vision API cannot cope with large documents, it can process only one file in .png or .jpg format.\
+\
+OpenCV\
+OpenCV is an open-source library for computer vision algorithms, machine learning, and image processing. In order to make text recognition more efficient, one should use OpenCV in combination with the Tesseract OCR engine. The code below recognizes and extracts words from an image and outputs the result in text format.\
+\
+import cv2\
+import pytesseract\
+\
+pytesseract.pytesseract.tesseract_cmd = '/usr/local/Cellar/tesseract/5.2.0/bin/tesseract'\
+\
+img = cv2.imread('/Users/path/Image.png')\
+img = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)\
+\
+config = r'--oem 3 --psm 6'\
+print(pytesseract.image_to_string(img, lang='rus', config=config)) # Other languages can be found at https://tesseract-ocr.github.io/tessdoc/Data-Files.html\
+\
+data = pytesseract.image_to_data(img, lang='rus', config=config) \
+\
+for i, el in enumerate(data.splitlines()):\
+	if i == 0:\
+		continue\
+\
+	el = el.split()\
+	try:\
+		x, y, w, h = int(el[6]), int(el[7]), int(el[8]), int(el[9])\
+		cv2.rectangle(img, (x, y), (w + x, h + y), (0, 0, 255), 1)\
+		cv2.putText(img, el[11], (x, y), cv2.FONT_HERSHEY_COMPLEX, 1, 1)\
+	except IndexError:\
+		print("Done")\
+\
+cv2.imshow('Result', img)\
+cv2.waitKey(0)\
+\
+\
+This code is good for the recognition of printed text (even in Russian by means of the training model rus.traineddata), but completely unsuitable for working with handwritten texts in Russian. For example, OpenCV and Tessaract were able to recognize the printed part of the archived document (words highlighted in bold maroon in Figure 6) but completely failed to recognize the handwritten part (Figure 7). It correctly detected the text type and alphabet (Cyrillic), but not a single word was recognized correctly.}
